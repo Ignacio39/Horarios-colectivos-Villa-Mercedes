@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Horarios de Colectivos Villa Mercedes</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 style="font-size: 1.8em; color: #2d3748; margin-bottom: 15px; font-weight: bold;">
+                Horarios de Colectivos Villa Mercedes
+            </h1>
+            <div class="current-time" id="currentTime">--:--:--</div>
+            <div class="current-date" id="currentDate">--</div>
+        </div>
+        
+        <div class="lines-container" id="linesContainer">
+            <!-- Las líneas se generarán dinámicamente -->
+        </div>
+        
+        <button class="view-toggle" id="viewToggle" onclick="toggleCompactView()">
+            Vista Compacta
+        </button>
+        
+        <button class="night-mode-toggle" id="nightModeToggle" onclick="toggleNightMode()" title="Modo Nocturno">
+            🌙
+        </button>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-left">
+                <div class="copyright">
+                    © 2025 Horarios de Colectivos Villa Mercedes
+                </div>
+                <div class="contact-info">
+                    Información actualizada en tiempo real
+                </div>
+            </div>
+            <div class="footer-right">
+                <div class="contact-info">
+                    ¿Dudas o sugerencias?
+                </div>
+                <div class="contact-info">
+                    Contacto: <a href="mailto:ignacioravelli@gmail.com">ignacioravelli@gmail.com</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="main.js"></script>
+</body>
+</html>
