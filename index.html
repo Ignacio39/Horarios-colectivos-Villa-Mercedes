@@ -20,17 +20,21 @@
             <!-- Las líneas se generarán dinámicamente -->
         </div>
         
-        <button class="view-toggle" id="viewToggle" onclick="toggleCompactView()">
-            Vista Compacta
-        </button>
         
         <button class="night-mode-toggle" id="nightModeToggle" onclick="toggleNightMode()" title="Modo Nocturno">
             🌙
         </button>
     </div>
 
+    <!-- Mapa de recorridos -->
+    <div class="map-container-responsive">
+        <div class="map-iframe-wrapper">
+            <iframe src="https://www.google.com/maps/d/embed?mid=19siz1ZDCDdoRBFgU0OmTftmlcJL3ku8&ehbc=2E312F" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+        </div>
+    </div>
+
     <!-- Footer -->
-    <footer class="footer">
+    <footer class="footer" id="mainFooter" style="display:none;">
         <div class="footer-content">
             <div class="footer-left">
                 <div class="copyright">
@@ -52,5 +56,22 @@
     </footer>
 
     <script src="main.js"></script>
+    <script>
+    // Mostrar el footer solo cuando se pasa el reloj
+    document.addEventListener('DOMContentLoaded', function() {
+        const footer = document.getElementById('mainFooter');
+        const header = document.querySelector('.header');
+        function checkFooterVisibility() {
+            const headerRect = header.getBoundingClientRect();
+            if (headerRect.bottom < 0) {
+                footer.style.display = 'block';
+            } else {
+                footer.style.display = 'none';
+            }
+        }
+        window.addEventListener('scroll', checkFooterVisibility);
+        checkFooterVisibility();
+    });
+    </script>
 </body>
 </html>
