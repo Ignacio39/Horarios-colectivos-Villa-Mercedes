@@ -3,7 +3,7 @@
     width: 100%;
     display: flex;
     justify-content: center;
-    margin: 0 0 100px 0; /* sin margen arriba, sigue separado abajo */
+    margin: 20px 0 100px 0; /* solo 20px arriba, sigue separado abajo */
 }
 .map-iframe-wrapper {
     position: relative;
