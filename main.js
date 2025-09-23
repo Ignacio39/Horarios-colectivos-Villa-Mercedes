@@ -420,7 +420,7 @@ const scheduleData = {
 
 function getCurrentTime() {
     const now = new Date();
-    return {
+    const currentInfo = {
         time: now.toLocaleTimeString('es-AR', { 
             hour: '2-digit', 
             minute: '2-digit', 
@@ -435,6 +435,18 @@ function getCurrentTime() {
         day: now.toLocaleDateString('es-AR', { weekday: 'long' }),
         currentMinutes: now.getHours() * 60 + now.getMinutes()
     };
+    console.log('Información de fecha actual:', {
+        fechaCompleta: now.toString(),
+        diaOriginal: currentInfo.day,
+        diaNormalizado: currentInfo.day.toLowerCase()
+            .replace(/[á]/g, 'a')
+            .replace(/[é]/g, 'e')
+            .replace(/[í]/g, 'i')
+            .replace(/[ó]/g, 'o')
+            .replace(/[ú]/g, 'u'),
+        diasDisponibles: ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']
+    });
+    return currentInfo;
 }
 
 function timeToMinutes(timeStr) {
@@ -443,7 +455,17 @@ function timeToMinutes(timeStr) {
 }
 
 function findNextBuses(lineSchedules, stopName, current) {
-    if (!lineSchedules || !lineSchedules[stopName]) return null;
+    console.log('Verificando horarios para:', {
+        parada: stopName,
+        dia: current.day,
+        horariosDisponibles: Object.keys(lineSchedules),
+        datosCompletos: lineSchedules
+    });
+    
+    if (!lineSchedules) {
+        console.log('No hay horarios definidos');
+        return null;
+    }
 
     // Normalizar el nombre del día para coincidir con las claves
     let scheduleType = current.day.toLowerCase()
@@ -452,6 +474,15 @@ function findNextBuses(lineSchedules, stopName, current) {
         .replace(/[í]/g, 'i')
         .replace(/[ó]/g, 'o')
         .replace(/[ú]/g, 'u');
+        
+    console.log('Día normalizado:', scheduleType);
+    
+    console.log('Día original:', current.day);
+    console.log('Día normalizado:', scheduleType);
+    console.log('Horarios disponibles:', Object.keys(lineSchedules));
+    console.log('Parada:', stopName);
+    console.log('Horarios para esta parada:', lineSchedules[scheduleType]?.[stopName]);
+    
     // Buscar el horario para el día actual
     const schedules = lineSchedules[scheduleType]?.[stopName];
     
