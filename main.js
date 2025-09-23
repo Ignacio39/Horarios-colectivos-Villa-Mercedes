@@ -437,6 +437,12 @@ function getCurrentTime() {
     };
     console.log('Información de fecha actual:', {
         fechaCompleta: now.toString(),
+        diaSemana: currentInfo.day,
+        hora: currentInfo.time,
+        minutosTotales: currentInfo.currentMinutes
+    });
+    console.log('Información de fecha actual:', {
+        fechaCompleta: now.toString(),
         diaOriginal: currentInfo.day,
         diaNormalizado: currentInfo.day.toLowerCase()
             .replace(/[á]/g, 'a')
@@ -455,25 +461,106 @@ function timeToMinutes(timeStr) {
 }
 
 function findNextBuses(lineSchedules, stopName, current) {
-    console.log('Verificando horarios para:', {
-        parada: stopName,
+    // Normalizar nombre de la parada
+    let normalizedStopName = stopName;
+    
+    // Primero reemplazar el carácter ° por º si existe
+    normalizedStopName = normalizedStopName.replace('°', 'º');
+    
+    // Lista de variantes conocidas y sus nombres normalizados
+    const stopVariants = {
+        'Htal Bº Eva Peron': 'Hospital Bº Eva Peron',
+        'Htal B° Eva Peron': 'Hospital Bº Eva Peron',
+        'Hospital B° Eva Peron': 'Hospital Bº Eva Peron'
+    };
+    
+    // Intentar encontrar la parada en las variantes conocidas
+    if (stopVariants[normalizedStopName]) {
+        const originalName = normalizedStopName;
+        normalizedStopName = stopVariants[normalizedStopName];
+        console.log('Normalizando nombre de parada:', {
+            original: originalName,
+            normalizado: normalizedStopName
+        });
+    }
+    
+    // Si no se encuentra la parada normalizada, intentar con todas las variantes
+    if (!lineSchedules[normalizedStopName]) {
+        console.log('Buscando horarios en variantes alternativas');
+        for (const [variant, normalized] of Object.entries(stopVariants)) {
+            if (lineSchedules[variant]) {
+                normalizedStopName = variant;
+                console.log('Encontrados horarios en variante:', variant);
+                break;
+            }
+            if (lineSchedules[normalized]) {
+                normalizedStopName = normalized;
+                console.log('Encontrados horarios en nombre normalizado:', normalized);
+                break;
+            }
+        }
+    }
+    
+    console.log('Estado de la búsqueda:', {
+        paradaOriginal: stopName,
+        paradaNormalizada: normalizedStopName,
         dia: current.day,
-        horariosDisponibles: Object.keys(lineSchedules),
-        datosCompletos: lineSchedules
+        paradasDisponibles: Object.keys(lineSchedules),
+        tieneHorariosParaParada: lineSchedules[normalizedStopName] ? 'Sí' : 'No',
+        horariosEncontrados: lineSchedules[normalizedStopName] ? Object.keys(lineSchedules[normalizedStopName]) : 'ninguno'
     });
     
     if (!lineSchedules) {
-        console.log('No hay horarios definidos');
+        console.log('ERROR: No hay horarios definidos');
         return null;
     }
 
+    console.log('Datos de horarios:', {
+        paradasDisponibles: Object.keys(lineSchedules),
+        tieneHorariosParaParada: lineSchedules[normalizedStopName] ? 'Sí' : 'No',
+        horariosParaDia: lineSchedules[normalizedStopName] ? Object.keys(lineSchedules[normalizedStopName]) : 'ninguno'
+    });
+    
+    // Usar el nombre normalizado para el resto de la función
+    stopName = normalizedStopName;
+
     // Normalizar el nombre del día para coincidir con las claves
+    // Normalizar el nombre del día
     let scheduleType = current.day.toLowerCase()
         .replace(/[á]/g, 'a')
         .replace(/[é]/g, 'e')
         .replace(/[í]/g, 'i')
         .replace(/[ó]/g, 'o')
         .replace(/[ú]/g, 'u');
+
+    // Mapeo de días de la semana
+    const dayMappings = {
+        'lunes': 'lunes',
+        'martes': 'martes',
+        'miercoles': 'miercoles',
+        'miércoles': 'miercoles',
+        'jueves': 'jueves',
+        'viernes': 'viernes',
+        'sabado': 'sabado',
+        'sábado': 'sabado',
+        'domingo': 'domingo'
+    };
+
+    scheduleType = dayMappings[scheduleType] || scheduleType;
+
+    console.log('Procesamiento del día:', {
+        diaOriginal: current.day,
+        diaNormalizado: scheduleType,
+        diasDisponibles: lineSchedules[normalizedStopName] ? Object.keys(lineSchedules[normalizedStopName]) : [],
+        tieneDia: lineSchedules[normalizedStopName] && lineSchedules[normalizedStopName][scheduleType] ? 'Sí' : 'No'
+    });
+
+    console.log('Procesamiento del día:', {
+        diaOriginal: current.day,
+        diaNormalizado: scheduleType,
+        diasDisponibles: lineSchedules[normalizedStopName] ? Object.keys(lineSchedules[normalizedStopName]) : [],
+        tieneDia: lineSchedules[normalizedStopName] && lineSchedules[normalizedStopName][scheduleType] ? 'Sí' : 'No'
+    });
         
     console.log('Día normalizado:', scheduleType);
     
