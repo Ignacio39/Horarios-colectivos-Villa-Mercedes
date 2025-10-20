@@ -666,6 +666,26 @@ function updateDisplay() {
 let nightModeActive = false;
 
 // Función para alternar modo nocturno
+// Función para cambiar entre mapas
+function showMap(mapType) {
+    const routesMap = document.getElementById('routesMap');
+    const chargeMap = document.getElementById('chargeMap');
+    const routesButton = document.querySelector('.map-button:first-child');
+    const chargeButton = document.querySelector('.map-button:last-child');
+
+    if (mapType === 'routes') {
+        routesMap.style.display = 'block';
+        chargeMap.style.display = 'none';
+        routesButton.classList.add('active');
+        chargeButton.classList.remove('active');
+    } else {
+        routesMap.style.display = 'none';
+        chargeMap.style.display = 'block';
+        routesButton.classList.remove('active');
+        chargeButton.classList.add('active');
+    }
+}
+
 function toggleNightMode() {
     const body = document.body;
     const button = document.getElementById('nightModeToggle');

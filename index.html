@@ -26,10 +26,22 @@
         </button>
     </div>
 
-    <!-- Mapa de recorridos --> 
-    <div class="map-container-responsive">
-        <div class="map-iframe-wrapper">
-            <iframe src="https://www.google.com/maps/d/embed?mid=19siz1ZDCDdoRBFgU0OmTftmlcJL3ku8&ehbc=2E312F" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+    <!-- Contenedor de mapas con selector -->
+    <div class="maps-section">
+        <div class="map-selector">
+            <button class="map-button active" onclick="showMap('routes')">Recorridos</button>
+            <button class="map-button" onclick="showMap('charge')">Puntos de Carga</button>
+        </div>
+        
+        <div class="map-container-responsive">
+            <!-- Mapa de recorridos -->
+            <div class="map-iframe-wrapper" id="routesMap">
+                <iframe src="https://www.google.com/maps/d/embed?mid=19siz1ZDCDdoRBFgU0OmTftmlcJL3ku8&ehbc=2E312F" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+            </div>
+            <!-- Mapa de puntos de carga -->
+            <div class="map-iframe-wrapper" id="chargeMap" style="display: none;">
+                <iframe src="https://www.google.com/maps/d/embed?mid=1HnqzH7AAyDGyXJMkr8MWV4tmYRLRqHY&ehbc=2E312F" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+            </div>
         </div>
     </div>
 
@@ -57,13 +69,17 @@
 
     <script src="main.js"></script>
     <script>
-    // Mostrar el footer solo cuando se pasa el reloj
+    // Mostrar el footer solo cuando se baja lo suficiente
     document.addEventListener('DOMContentLoaded', function() {
         const footer = document.getElementById('mainFooter');
-        const header = document.querySelector('.header');
+        const mapContainer = document.querySelector('.map-container');
         function checkFooterVisibility() {
-            const headerRect = header.getBoundingClientRect();
-            if (headerRect.bottom < 0) {
+            const scrollPosition = window.scrollY;
+            const windowHeight = window.innerHeight;
+            const documentHeight = document.documentElement.scrollHeight;
+            const footerThreshold = documentHeight - windowHeight - 100; // 100px antes del final
+            
+            if (scrollPosition > footerThreshold) {
                 footer.style.display = 'block';
             } else {
                 footer.style.display = 'none';

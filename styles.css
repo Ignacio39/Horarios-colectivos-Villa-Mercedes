@@ -1,10 +1,53 @@
 /* Mapa responsivo */
+/* Estilos para la sección de mapas */
+.maps-section {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 20px 0 30px 0; /* Ajustado a 30px */
+}
+
+.map-selector {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.map-button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 25px;
+    background: #4a5568;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.map-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.map-button.active {
+    background: #4299e1;
+}
+
+.dark-mode .map-button {
+    background: #2d3748;
+}
+
+.dark-mode .map-button.active {
+    background: #4299e1;
+}
+
 .map-container-responsive {
     width: 100%;
     display: flex;
     justify-content: center;
-    margin: 20px 0 100px 0; /* solo 20px arriba, sigue separado abajo */
 }
+
 .map-iframe-wrapper {
     position: relative;
     width: 80vw;
@@ -44,7 +87,7 @@ body {
     max-width: 1400px;
     margin: 0 auto;
     padding: 20px;
-    padding-bottom: 120px;
+    padding-bottom: 40px; /* Aumentado a 40px para evitar que el footer tape el contenido */
 }
 .header {
     text-align: center;
@@ -139,16 +182,14 @@ body {
     margin-left: 8px;
 }
 .footer {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    position: relative; /* Cambiado de fixed a relative */
+    width: 100%;
     background: #2d3748;
     color: white;
     padding: 15px 20px;
     text-align: center;
     box-shadow: 0 -4px 12px rgba(0,0,0,0.1);
-    z-index: 500;
+    margin-top: 40px; /* Agregar margen superior */
 }
 .footer-content {
     max-width: 1200px;
@@ -267,7 +308,19 @@ body {
 @media (max-width: 768px) {
     .container {
         padding: 10px;
-        padding-bottom: 140px;
+        padding-bottom: 40px;
+    }
+    
+    .map-selector {
+        flex-direction: column;
+        width: 100%;
+        padding: 0 20px;
+    }
+
+    .map-button {
+        width: 100%;
+        padding: 12px;
+        text-align: center;
     }
     .current-time {
         font-size: 2.2em;
@@ -330,7 +383,7 @@ body {
 @media (max-width: 480px) {
     .container {
         padding: 8px;
-        padding-bottom: 150px;
+        padding-bottom: 40px;
     }
     .current-time {
         font-size: 1.8em;
