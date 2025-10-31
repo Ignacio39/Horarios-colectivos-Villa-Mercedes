@@ -621,7 +621,10 @@ function updateDisplay() {
         const lineCard = document.createElement('div');
         lineCard.className = 'line-card';
         
-        const lineClass = lineName.toLowerCase().replace('línea ', 'line-').replace(' ', '-');
+        const lineClass = lineName.toLowerCase()
+            .replace('línea ', 'line-')
+            .replace('zona ', 'line-')
+            .replace(' ', '');
         
         let stopsHTML = '';
         lineData.stops.forEach(stopName => {

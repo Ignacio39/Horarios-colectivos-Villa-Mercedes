@@ -132,10 +132,10 @@ body {
     font-weight: bold;
     margin-right: 15px;
 }
-.line-badge.line-a { background: #48bb78; }
-.line-badge.line-e { background: #ed8936; }
-.line-badge.line-este { background: #9f7aea; }
-.line-badge.line-oeste { background: #38b2ac; }
+.line-badge.line-a { background: #4299e1; }
+.line-badge.line-e { background: #48bb78; }
+.line-badge.line-este { background: #ed8936; }
+.line-badge.line-oeste { background: #dc2626; }
 .stops-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
