@@ -1,5 +1,28 @@
-// Datos de horarios organizados por línea
-const scheduleData = {
+// Función para cargar datos desde Firebase
+async function loadScheduleDataFromFirebase() {
+    try {
+        const scheduleSnapshot = await getDocs(collection(db, 'lines'));
+        const firebaseData = {};
+        
+        scheduleSnapshot.forEach((doc) => {
+            const lineData = doc.data();
+            firebaseData[lineData.name] = {
+                stops: lineData.stops,
+                schedules: lineData.schedules
+            };
+        });
+        
+        console.log('Datos cargados desde Firebase:', firebaseData);
+        return firebaseData;
+    } catch (error) {
+        console.error('Error loading data from Firebase:', error);
+        // Si hay un error, devolver los datos locales como respaldo
+        return scheduleData;
+    }
+}
+
+// Datos de horarios organizados por línea (respaldo local)
+export const scheduleData = {
     'Línea A': {
         stops: [
             'Salida Facultad', 'Terminal', 'Balcarce y Urquiza', 'L.Guillet y G.Paz', 
@@ -609,10 +632,14 @@ function findNextBuses(lineSchedules, stopName, current) {
     };
 }
 
-function updateDisplay() {
+async function updateDisplay() {
     const current = getCurrentTime();
     document.getElementById('currentTime').textContent = current.time;
     document.getElementById('currentDate').textContent = current.date;
+    
+    // Intentar cargar datos desde Firebase
+    const firebaseData = await loadScheduleDataFromFirebase();
+    const dataToUse = firebaseData || scheduleData; // Usar datos locales como respaldo
     
     const container = document.getElementById('linesContainer');
     container.innerHTML = '';
@@ -713,12 +740,18 @@ function isMobile() {
 }
 
 // Inicialización
-function init() {
-    updateDisplay();
+async function init() {
+    await updateDisplay();
     // Forzar siempre la vista compacta
     document.body.classList.add('compact-view');
     // Actualizar cada 1 segundo
     setInterval(updateDisplay, 1000);
+    
+    // Escuchar cambios en tiempo real de Firebase
+    const linesCollection = collection(window.db, 'lines');
+    onSnapshot(linesCollection, (snapshot) => {
+        updateDisplay(); // Actualizar cuando hay cambios en Firebase
+    });
     // Agregar event listeners para interactividad táctil
     document.addEventListener('touchstart', function(e) {
         if (e.target.classList.contains('stop-card')) {
