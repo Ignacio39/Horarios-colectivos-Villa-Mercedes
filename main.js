@@ -1,3 +1,5 @@
+import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
 // Función para cargar datos desde Firebase
 async function loadScheduleDataFromFirebase() {
     try {
@@ -16,10 +18,193 @@ async function loadScheduleDataFromFirebase() {
         return firebaseData;
     } catch (error) {
         console.error('Error loading data from Firebase:', error);
-        // Si hay un error, devolver los datos locales como respaldo
-        return scheduleData;
+        throw error;
     }
 }
+
+// Función para encontrar el próximo horario
+function findNextSchedules(schedules, currentTime) {
+    const next = [];
+    for (const time of schedules) {
+        const [hours, minutes] = time.split(':').map(Number);
+        const scheduleTime = hours * 60 + minutes;
+        const currentMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
+        
+        if (scheduleTime >= currentMinutes) {
+            next.push(time);
+            if (next.length >= 3) break;
+        }
+    }
+    return next;
+}
+
+// Función para mostrar los horarios
+function displaySchedules(scheduleData) {
+    const linesContainer = document.getElementById('linesContainer');
+    const now = new Date();
+    const days = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+    const currentDay = days[now.getDay()];
+    
+    linesContainer.innerHTML = ''; // Limpiar el contenedor
+    
+    for (const [lineName, lineData] of Object.entries(scheduleData)) {
+        const lineElement = document.createElement('div');
+        lineElement.className = 'line-card';
+        
+        // Crear el encabezado de la línea
+        const lineHeader = document.createElement('div');
+        lineHeader.className = 'line-header';
+        lineHeader.innerHTML = `
+            <div class="line-badge">${lineName}</div>
+            <h2>${lineName}</h2>
+        `;
+        
+        // Crear el contenedor de paradas
+        const stopsGrid = document.createElement('div');
+        stopsGrid.className = 'stops-grid';
+        
+        // Procesar cada parada
+        for (const stop of lineData.stops) {
+            const schedules = lineData.schedules[currentDay]?.[stop] || [];
+            const nextSchedules = findNextSchedules(schedules, now);
+            
+            const stopCard = document.createElement('div');
+            stopCard.className = 'stop-card';
+            
+            let scheduleDisplay;
+            if (nextSchedules.length > 0) {
+                const [next, ...upcoming] = nextSchedules;
+                scheduleDisplay = `
+                    <div class="stop-name">${stop}</div>
+                    <div class="next-bus">Próximo: ${next}</div>
+                    ${upcoming.length > 0 ? 
+                        `<div class="upcoming">Siguientes: ${upcoming.join(', ')}</div>` : 
+                        ''}
+                `;
+            } else {
+                scheduleDisplay = `
+                    <div class="stop-name">${stop}</div>
+                    <div class="no-service">No hay más servicios hoy</div>
+                `;
+            }
+            
+            stopCard.innerHTML = scheduleDisplay;
+            stopsGrid.appendChild(stopCard);
+        }
+        
+        lineElement.appendChild(lineHeader);
+        lineElement.appendChild(stopsGrid);
+        linesContainer.appendChild(lineElement);
+    }
+}
+
+// Función para mostrar la hora actual
+function updateCurrentTime() {
+    const now = new Date();
+    const timeElement = document.getElementById('currentTime');
+    const dateElement = document.getElementById('currentDate');
+    
+    // Formatear hora usando un elemento temporal para minimizar reflows
+    let hours = now.getHours();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12; // la hora '0' debe ser '12'
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const newTime = `${String(hours).padStart(2, '0')}:${minutes}:${seconds} ${ampm}`;
+    
+    if (timeElement.textContent !== newTime) {
+        requestAnimationFrame(() => {
+            timeElement.textContent = newTime;
+        });
+    }
+    
+    // Formatear fecha (solo si cambia el día)
+    const currentDate = timeElement.dataset.currentDate || '';
+    const newDate = now.toDateString();
+    
+    if (currentDate !== newDate) {
+        const days = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+        const months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+        
+        const dayName = days[now.getDay()];
+        const day = now.getDate();
+        const month = months[now.getMonth()];
+        const year = now.getFullYear();
+        
+        timeElement.dataset.currentDate = newDate;
+        requestAnimationFrame(() => {
+            dateElement.textContent = `${dayName}, ${day} de ${month} de ${year}`;
+        });
+    }
+}
+
+// Función para cambiar entre mapas
+window.showMap = function(mapType) {
+    const routesMap = document.getElementById('routesMap');
+    const chargeMap = document.getElementById('chargeMap');
+    const buttons = document.querySelectorAll('.map-button');
+    
+    buttons.forEach(button => button.classList.remove('active'));
+    
+    if (mapType === 'routes') {
+        routesMap.style.display = 'block';
+        chargeMap.style.display = 'none';
+        buttons[0].classList.add('active');
+    } else if (mapType === 'charge') {
+        routesMap.style.display = 'none';
+        chargeMap.style.display = 'block';
+        buttons[1].classList.add('active');
+    }
+}
+
+// Función para alternar el modo oscuro
+window.toggleNightMode = function() {
+    document.body.classList.toggle('dark-mode');
+    const isDarkMode = document.body.classList.contains('dark-mode');
+    localStorage.setItem('darkMode', isDarkMode);
+}
+
+async function initializeApp() {
+    try {
+        // Cargar datos desde Firebase
+        const scheduleData = await loadScheduleDataFromFirebase();
+        
+        // Mostrar los horarios
+        displaySchedules(scheduleData);
+        
+        // Actualizar la hora cada segundo
+        updateCurrentTime();
+        setInterval(updateCurrentTime, 1000);
+        
+        // Actualizar los horarios cada minuto
+        setInterval(() => displaySchedules(scheduleData), 60000);
+        
+        // Restaurar preferencia de modo oscuro
+        const isDarkMode = localStorage.getItem('darkMode') === 'true';
+        if (isDarkMode) {
+            document.body.classList.add('dark-mode');
+        }
+        
+        // Mostrar mapa de rutas por defecto
+        showMap('routes');
+        
+        console.log('Aplicación inicializada con éxito');
+        
+    } catch (error) {
+        console.error('Error al inicializar la aplicación:', error);
+        // Mostrar mensaje de error al usuario
+        const linesContainer = document.getElementById('linesContainer');
+        linesContainer.innerHTML = `
+            <div class="error-message">
+                Hubo un error al cargar los horarios. Por favor, intente nuevamente más tarde.
+            </div>
+        `;
+    }
+}
+
+// Iniciar la aplicación cuando el DOM esté listo
+document.addEventListener('DOMContentLoaded', initializeApp);
 
 // Datos de horarios organizados por línea (respaldo local)
 export const scheduleData = {

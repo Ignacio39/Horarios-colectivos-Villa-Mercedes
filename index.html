@@ -86,20 +86,12 @@
         const db = getFirestore(app);
         window.db = db;
     </script>
-            appId: "1:403738748045:web:c154d89e59e5e4b96deec4"
-        };
-
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        window.db = db;
-    </script>
     <script src="main.js" type="module"></script>
     <script>
     // Mostrar el footer solo cuando se baja lo suficiente
     document.addEventListener('DOMContentLoaded', function() {
         const footer = document.getElementById('mainFooter');
-        const mapContainer = document.querySelector('.map-container');
+        const mapContainer = document.querySelector('.map-container-responsive');
         function checkFooterVisibility() {
             const scrollPosition = window.scrollY;
             const windowHeight = window.innerHeight;
