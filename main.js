@@ -1,10 +1,464 @@
 import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { scheduleData as localScheduleData } from './data.js';
 
-// Función para cargar datos desde Firebase
+// Estado global para rastrear fuente de datos
+let dataSource = 'unknown'; // 'firebase', 'local', 'localStorage'
+let appState = {
+    intervals: [],
+    currentScheduleData: null
+};
+
+// ======== FUNCIONES DE CLIMA ========
+async function getWeather() {
+    try {
+        // Coordenadas de Villa Mercedes (Argentina)
+        const lat = -35.4167;
+        const lon = -65.4667;
+        
+        const response = await fetch(
+            `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,relative_humidity_2m&timezone=America/Argentina/Buenos_Aires`,
+            { signal: AbortSignal.timeout(5000) }
+        );
+        
+        if (!response.ok) throw new Error('API no disponible');
+        
+        const data = await response.json();
+        const current = data.current;
+        
+        return {
+            temp: Math.round(current.temperature_2m),
+            condition: getWeatherDescription(current.weather_code),
+            icon: getWeatherIcon(current.weather_code),
+            humidity: current.relative_humidity_2m
+        };
+    } catch (error) {
+        console.warn('⚠️ No se pudo cargar el clima en tiempo real:', error.message);
+        return null;
+    }
+}
+
+function getWeatherIcon(code) {
+    const icons = {
+        0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️',
+        45: '🌫️', 48: '🌫️',
+        51: '🌧️', 53: '🌧️', 55: '🌧️',
+        61: '🌧️', 63: '🌧️', 65: '🌧️',
+        71: '🌨️', 73: '🌨️', 75: '🌨️',
+        80: '⛈️', 81: '⛈️', 82: '⛈️',
+        95: '⛈️', 96: '⛈️', 99: '⛈️'
+    };
+    return icons[code] || '🌤️';
+}
+
+function getWeatherDescription(code) {
+    const descriptions = {
+        0: 'Despejado', 1: 'Parcialmente nublado', 2: 'Nublado', 3: 'Nublado',
+        45: 'Niebla', 48: 'Niebla',
+        51: 'Llovizna', 53: 'Llovizna', 55: 'Llovizna fuerte',
+        61: 'Lluvia', 63: 'Lluvia', 65: 'Lluvia fuerte',
+        71: 'Nieve', 73: 'Nieve', 75: 'Nieve fuerte',
+        80: 'Lluvia fuerte', 81: 'Lluvia muy fuerte', 82: 'Lluvia extrema',
+        95: 'Tormenta', 96: 'Tormenta con granizo', 99: 'Tormenta fuerte'
+    };
+    return descriptions[code] || 'Desconocido';
+}
+
+async function getWeatherWithFallback() {
+    let weather = await getWeather();
+    
+    if (!weather) {
+        // Intentar usar el clima guardado
+        try {
+            const cached = localStorage.getItem('cachedWeather');
+            if (cached) {
+                weather = JSON.parse(cached);
+                console.log('⚠️ Usando clima en caché');
+            }
+        } catch (e) {
+            console.warn('No hay clima en caché disponible');
+        }
+    } else {
+        // Guardar para fallback
+        try {
+            localStorage.setItem('cachedWeather', JSON.stringify(weather));
+        } catch (e) {
+            console.warn('No se pudo guardar clima en caché');
+        }
+    }
+    
+    return weather;
+}
+
+function displayWeather(weather) {
+    if (!weather) {
+        document.getElementById('temp').textContent = '--°C';
+        document.getElementById('weather-condition').textContent = '❓';
+        document.getElementById('weather-desc').textContent = 'No disponible';
+        document.getElementById('humidity').textContent = '--%';
+        return;
+    }
+    
+    document.getElementById('temp').textContent = `${weather.temp}°C`;
+    document.getElementById('weather-condition').textContent = weather.icon;
+    document.getElementById('weather-desc').textContent = weather.condition;
+    document.getElementById('humidity').textContent = `${weather.humidity}%`;
+    console.log('✅ Clima actualizado:', weather);
+}
+
+// ======== FUNCIONES DE GEOLOCALIZACIÓN ========
+
+// Coordenadas aproximadas de paradas en Villa Mercedes
+const stopsCoordinates = {
+    // Línea A
+    'Salida Facultad': [-35.4150, -65.4680],
+    'Terminal': [-35.4165, -65.4670],
+    'Balcarce y Urquiza': [-35.4175, -65.4665],
+    'L.Guillet y G.Paz': [-35.4185, -65.4660],
+    'Entrada Ate II': [-35.4195, -65.4655],
+    'Salida F.Sarmiento': [-35.4205, -65.4650],
+    'Nelson e Yrigoyen': [-35.4215, -65.4645],
+    'G.Paz y Maipu': [-35.4225, -65.4640],
+    'Llegada Facultad': [-35.4235, -65.4635],
+    
+    // Línea E
+    'Plaza': [-35.4160, -65.4675],
+    'Hospital': [-35.4170, -65.4670],
+    'Policlínico Regional': [-35.4180, -65.4665],
+    'Centro Comercial': [-35.4190, -65.4660],
+    'Universidad': [-35.4200, -65.4655],
+    'Polideportivo': [-35.4210, -65.4650],
+    'Teatro Municipal': [-35.4220, -65.4645],
+    
+    // Zona Este
+    'Plaza Central': [-35.4155, -65.4680],
+    'Escuela Nº 5': [-35.4165, -65.4675],
+    'Parque Industrial': [-35.4175, -65.4670],
+    'Centro Deportivo': [-35.4185, -65.4665],
+    'Biblioteca Municipal': [-35.4195, -65.4660],
+    
+    // Zona Oeste
+    'Barrio Oeste': [-35.4145, -65.4685],
+    'Zona Comercial': [-35.4155, -65.4680],
+    'Parque Municipal': [-35.4165, -65.4675],
+    
+    // Paradas adicionales (de data.js)
+    'M.Ernst y Cazorla': [-35.4155, -65.4682],
+    'Hospital La Ribera': [-35.4165, -65.4677],
+    'Escuela Agraria': [-35.4175, -65.4672],
+    'Ayacucho y Balcarce': [-35.4185, -65.4667],
+    'Policlinico': [-35.4195, -65.4662],
+    'Llegada Terminal': [-35.4205, -65.4657],
+    'Salida Terminal': [-35.4215, -65.4652],
+    'Hospital de la Villa': [-35.4225, -65.4647],
+    'Balcarce y Riobamba': [-35.4235, -65.4642],
+    'Entrada Bº La Ribera': [-35.4245, -65.4637],
+    'Pellegrini y Nelson': [-35.4145, -65.4690],
+    'Maipu y Avila': [-35.4155, -65.4685],
+    'Tucuman y Tallaferro': [-35.4165, -65.4680],
+    'Potosi y Belgrano': [-35.4175, -65.4675],
+    'Lainez y Sallorenzo': [-35.4185, -65.4670],
+    '3 de Febrero y 25 de Mayo': [-35.4195, -65.4665],
+    'Balcarce y Maipu': [-35.4205, -65.4660],
+    'E.Aguero y L.Guillet': [-35.4215, -65.4655],
+    'Gauna y Maipu': [-35.4225, -65.4650],
+    'Htal Bº Eva Peron': [-35.4235, -65.4645],
+    'Hospital Bº Eva Peron': [-35.4235, -65.4645],
+    'Chacabuco y Guemes': [-35.4145, -65.4685],
+    'Llerena y Sallorenzo': [-35.4155, -65.4680],
+    'Balcarce y Ayacucho': [-35.4165, -65.4675]
+};
+
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    // Fórmula Haversine para calcular distancia en km
+    const R = 6371; // Radio de la Tierra en km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+async function requestUserLocation() {
+    return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+            console.warn('⚠️ Geolocalización no disponible');
+            resolve(null);
+            return;
+        }
+        
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const { latitude, longitude } = position.coords;
+                console.log('✅ Ubicación obtenida:', latitude, longitude);
+                localStorage.setItem('userLocation', JSON.stringify({ latitude, longitude }));
+                localStorage.setItem('locationTimestamp', new Date().toISOString());
+                resolve({ latitude, longitude });
+            },
+            (error) => {
+                console.warn('❌ Error al obtener ubicación:', error.message);
+                resolve(null);
+            },
+            { timeout: 5000, enableHighAccuracy: false }
+        );
+    });
+}
+
+function getUserLocation() {
+    const cached = localStorage.getItem('userLocation');
+    if (cached) {
+        try {
+            return JSON.parse(cached);
+        } catch (e) {
+            return null;
+        }
+    }
+    return null;
+}
+
+function sortStopsByProximity(stops, userLocation) {
+    if (!userLocation) return stops;
+    
+    const { latitude, longitude } = userLocation;
+    
+    const stopsWithDistance = stops.map(stop => {
+        const coords = stopsCoordinates[stop];
+        if (!coords) {
+            return { stop, distance: Infinity };
+        }
+        const distance = calculateDistance(latitude, longitude, coords[0], coords[1]);
+        return { stop, distance };
+    });
+    
+    // Ordenar por distancia
+    stopsWithDistance.sort((a, b) => a.distance - b.distance);
+    
+    return stopsWithDistance.map(item => item.stop);
+}
+
+function showLocationPrompt() {
+    // Verificar si ya pedimos ubicación antes
+    const hasAskedLocation = localStorage.getItem('hasAskedLocation');
+    if (hasAskedLocation) return;
+    
+    // Crear notificación para pedir ubicación
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        z-index: 9999;
+        max-width: 350px;
+        font-size: 14px;
+    `;
+    
+    notification.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: start; gap: 15px;">
+            <div>
+                <div style="font-weight: bold; margin-bottom: 8px;">📍 Ordenar paradas por proximidad</div>
+                <div style="opacity: 0.9; font-size: 13px;">¿Permitir acceso a tu ubicación para mostrar las paradas más cercanas?</div>
+            </div>
+            <button id="locationAllow" style="
+                background: #48bb78;
+                border: none;
+                color: white;
+                padding: 8px 12px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 12px;
+                font-weight: bold;
+                white-space: nowrap;
+            ">Permitir</button>
+            <button id="locationDeny" style="
+                background: rgba(255,255,255,0.2);
+                border: none;
+                color: white;
+                padding: 8px 12px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 12px;
+                white-space: nowrap;
+            ">Ahora no</button>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    document.getElementById('locationAllow').addEventListener('click', async () => {
+        localStorage.setItem('hasAskedLocation', 'true');
+        notification.remove();
+        const location = await requestUserLocation();
+        if (location) {
+            // Recargar paradas con nuevo orden
+            window.location.reload();
+        }
+    });
+    
+    document.getElementById('locationDeny').addEventListener('click', () => {
+        localStorage.setItem('hasAskedLocation', 'true');
+        notification.remove();
+    });
+}
+
+function saveSortOrder(lineName, stopsOrder) {
+    const sortOrder = JSON.parse(localStorage.getItem('stopsSortOrder') || '{}');
+    sortOrder[lineName] = stopsOrder;
+    localStorage.setItem('stopsSortOrder', JSON.stringify(sortOrder));
+    console.log('💾 Orden guardado para', lineName);
+}
+
+function getSortOrder(lineName) {
+    const sortOrder = JSON.parse(localStorage.getItem('stopsSortOrder') || '{}');
+    return sortOrder[lineName] || null;
+}
+
+function applySortOrder(stopsGrid, lineName, originalStops) {
+    const sortOrder = getSortOrder(lineName);
+    if (!sortOrder || sortOrder.length === 0) return;
+    
+    const cards = Array.from(stopsGrid.children);
+    const sortedCards = [];
+    
+    for (const stopName of sortOrder) {
+        const card = cards.find(c => c.dataset.stopName === stopName);
+        if (card) sortedCards.push(card);
+    }
+    
+    // Agregar cualquier parada que no esté en el orden guardado
+    for (const card of cards) {
+        if (!sortedCards.includes(card)) {
+            sortedCards.push(card);
+        }
+    }
+    
+    // Limpiar y re-agregar en el nuevo orden
+    stopsGrid.innerHTML = '';
+    for (const card of sortedCards) {
+        stopsGrid.appendChild(card);
+    }
+    
+    console.log('✅ Orden restaurado para', lineName);
+}
+
+function setupDragAndDrop(stopsGrid, lineName) {
+    // Usar mousedown/mouseup en lugar de drag events para mayor compatibilidad
+    let isDragging = false;
+    let draggedCard = null;
+    let ghostElement = null;
+    
+    stopsGrid.addEventListener('mousedown', (e) => {
+        const card = e.target.closest('.stop-card');
+        if (!card) return;
+        
+        isDragging = true;
+        draggedCard = card;
+        offsetY = e.clientY - card.getBoundingClientRect().top;
+        
+        // Crear elemento fantasma
+        ghostElement = card.cloneNode(true);
+        ghostElement.style.position = 'fixed';
+        ghostElement.style.opacity = '0.7';
+        ghostElement.style.pointerEvents = 'none';
+        ghostElement.style.zIndex = '10000';
+        ghostElement.style.boxShadow = '0 10px 30px rgba(0,0,0,0.3)';
+        document.body.appendChild(ghostElement);
+        
+        card.style.opacity = '0.4';
+        card.style.border = '2px dashed #4299e1';
+        
+        console.log('🎯 Drag iniciado:', card.dataset.stopName);
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging || !draggedCard) return;
+        
+        // Mover elemento fantasma
+        if (ghostElement) {
+            ghostElement.style.left = e.clientX + 'px';
+            ghostElement.style.top = (e.clientY - offsetY) + 'px';
+        }
+        
+        // Detectar card bajo el cursor
+        const cardUnderCursor = document.elementFromPoint(e.clientX, e.clientY)?.closest('.stop-card');
+        
+        // Limpiar estilos previos
+        stopsGrid.querySelectorAll('.stop-card').forEach(card => {
+            card.style.borderTop = '';
+            card.style.paddingTop = '15px';
+        });
+        
+        // Aplicar estilo a la card bajo el cursor
+        if (cardUnderCursor && cardUnderCursor !== draggedCard && cardUnderCursor.closest('.stops-grid') === stopsGrid) {
+            cardUnderCursor.style.borderTop = '3px solid #4299e1';
+            cardUnderCursor.style.paddingTop = '12px';
+        }
+    });
+    
+    document.addEventListener('mouseup', (e) => {
+        if (!isDragging || !draggedCard) return;
+        
+        isDragging = false;
+        
+        // Remover elemento fantasma
+        if (ghostElement) {
+            ghostElement.remove();
+            ghostElement = null;
+        }
+        
+        // Restaurar estilo
+        draggedCard.style.opacity = '1';
+        draggedCard.style.border = '';
+        
+        // Detectar card destino
+        const cardTarget = document.elementFromPoint(e.clientX, e.clientY)?.closest('.stop-card');
+        
+        if (cardTarget && cardTarget !== draggedCard && cardTarget.closest('.stops-grid') === stopsGrid) {
+            // Determinar posición relativa
+            const allCards = Array.from(stopsGrid.children);
+            const draggedIndex = allCards.indexOf(draggedCard);
+            const targetIndex = allCards.indexOf(cardTarget);
+            
+            // Intercambiar
+            if (draggedIndex < targetIndex) {
+                cardTarget.parentNode.insertBefore(draggedCard, cardTarget.nextSibling);
+            } else {
+                cardTarget.parentNode.insertBefore(draggedCard, cardTarget);
+            }
+            
+            console.log('✅ Parada movida:', draggedCard.dataset.stopName);
+        }
+        
+        // Limpiar estilos
+        stopsGrid.querySelectorAll('.stop-card').forEach(card => {
+            card.style.borderTop = '';
+            card.style.paddingTop = '15px';
+        });
+        
+        // Guardar nuevo orden
+        const newOrder = Array.from(stopsGrid.children).map(c => c.dataset.stopName);
+        saveSortOrder(lineName, newOrder);
+        
+        draggedCard = null;
+    });
+}
+
+// Función para cargar datos desde Firebase CON FALLBACK
 async function loadScheduleDataFromFirebase() {
     try {
         const scheduleSnapshot = await getDocs(collection(db, 'lines'));
         const firebaseData = {};
+        
+        if (scheduleSnapshot.empty) {
+            console.warn('Firebase vacío, usando fallback local');
+            throw new Error('No data in Firebase');
+        }
         
         scheduleSnapshot.forEach((doc) => {
             const lineData = doc.data();
@@ -14,38 +468,124 @@ async function loadScheduleDataFromFirebase() {
             };
         });
         
-        console.log('Datos cargados desde Firebase:', firebaseData);
+        console.log('✅ Datos cargados desde Firebase');
+        dataSource = 'firebase';
+        
+        // Guardar en localStorage como respaldo
+        localStorage.setItem('scheduleData_cache', JSON.stringify(firebaseData));
+        localStorage.setItem('scheduleData_timestamp', new Date().toISOString());
+        
         return firebaseData;
-    } catch (error) {
-        console.error('Error loading data from Firebase:', error);
-        throw error;
+    } catch (firebaseError) {
+        console.warn('❌ Firebase no disponible, intentando fallback...', firebaseError.message);
+        return loadScheduleDataFromFallback();
     }
 }
 
-// Función para encontrar el próximo horario
-function findNextSchedules(schedules, currentTime) {
-    const next = [];
-    for (const time of schedules) {
-        const [hours, minutes] = time.split(':').map(Number);
-        const scheduleTime = hours * 60 + minutes;
-        const currentMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
-        
-        if (scheduleTime >= currentMinutes) {
-            next.push(time);
-            if (next.length >= 3) break;
+// Función de FALLBACK: intenta local data, luego localStorage
+function loadScheduleDataFromFallback() {
+    // Opción 1: Usar datos locales en memoria (data.js)
+    if (localScheduleData && Object.keys(localScheduleData).length > 0) {
+        console.log('✅ Usando datos locales (data.js)');
+        dataSource = 'local';
+        return localScheduleData;
+    }
+    
+    // Opción 2: Usar datos cacheados en localStorage
+    const cachedData = localStorage.getItem('scheduleData_cache');
+    if (cachedData) {
+        try {
+            const parsedData = JSON.parse(cachedData);
+            const timestamp = localStorage.getItem('scheduleData_timestamp');
+            console.log('✅ Usando datos cacheados en localStorage (desde:', timestamp, ')');
+            dataSource = 'localStorage';
+            return parsedData;
+        } catch (error) {
+            console.error('Error al parsear datos cacheados:', error);
         }
     }
+    
+    // Opción 3: No hay datos disponibles
+    console.error('❌ No hay datos disponibles (Firebase, local ni cache)');
+    dataSource = 'offline';
+    return null;
+}
+
+// Función para encontrar el próximo horario CON VALIDACIÓN
+function findNextSchedules(schedules, currentTime) {
+    const next = [];
+    
+    // Validar que schedules sea un array
+    if (!Array.isArray(schedules) || schedules.length === 0) {
+        return next;
+    }
+    
+    for (const time of schedules) {
+        try {
+            // Validar formato HH:MM
+            if (typeof time !== 'string' || !time.match(/^\d{2}:\d{2}$/)) {
+                console.warn(`⚠️ Formato de hora inválido: "${time}"`);
+                continue;
+            }
+            
+            const [hours, minutes] = time.split(':').map(Number);
+            
+            // Validar rangos
+            if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+                console.warn(`⚠️ Hora fuera de rango: ${time}`);
+                continue;
+            }
+            
+            const scheduleTime = hours * 60 + minutes;
+            const currentMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
+            
+            if (scheduleTime >= currentMinutes) {
+                next.push(time);
+                if (next.length >= 3) break;
+            }
+        } catch (error) {
+            console.error(`❌ Error procesando horario "${time}":`, error);
+        }
+    }
+    
     return next;
 }
 
-// Función para mostrar los horarios
-function displaySchedules(scheduleData) {
+// Función para mostrar los horarios CON INDICADOR DE FUENTE
+async function displaySchedules(scheduleData) {
     const linesContainer = document.getElementById('linesContainer');
     const now = new Date();
     const days = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
     const currentDay = days[now.getDay()];
     
+    // Cargar y mostrar clima
+    const weather = await getWeatherWithFallback();
+    displayWeather(weather);
+    
+    // Si no hay datos, mostrar error
+    if (!scheduleData || Object.keys(scheduleData).length === 0) {
+        linesContainer.innerHTML = `
+            <div class="error-message">
+                <strong>⚠️ No hay datos disponibles</strong>
+                <p>No se pudo conectar con Firebase ni se encontraron datos locales.</p>
+                <p>Por favor, verifica tu conexión a internet.</p>
+            </div>
+        `;
+        return;
+    }
+    
     linesContainer.innerHTML = ''; // Limpiar el contenedor
+    
+    // Mostrar indicador de fuente de datos
+    if (dataSource === 'localStorage' || dataSource === 'local') {
+        const dataSourceBanner = document.createElement('div');
+        dataSourceBanner.className = 'data-source-banner';
+        dataSourceBanner.innerHTML = `
+            <span>${dataSource === 'localStorage' ? '📦 Datos en caché' : '💾 Datos locales'}</span>
+            ${dataSource === 'localStorage' ? '<small>(sin conexión a Firebase)</small>' : ''}
+        `;
+        linesContainer.parentElement.insertBefore(dataSourceBanner, linesContainer);
+    }
     
     for (const [lineName, lineData] of Object.entries(scheduleData)) {
         const lineElement = document.createElement('div');
@@ -63,13 +603,24 @@ function displaySchedules(scheduleData) {
         const stopsGrid = document.createElement('div');
         stopsGrid.className = 'stops-grid';
         
+        // Obtener ubicación del usuario para ordenar por proximidad
+        let stopsToDisplay = lineData.stops;
+        const userLocation = getUserLocation();
+        if (userLocation) {
+            stopsToDisplay = sortStopsByProximity(lineData.stops, userLocation);
+            console.log('📍 Paradas ordenadas por proximidad para', lineName);
+        }
+        
         // Procesar cada parada
-        for (const stop of lineData.stops) {
+        for (const stop of stopsToDisplay) {
             const schedules = lineData.schedules[currentDay]?.[stop] || [];
             const nextSchedules = findNextSchedules(schedules, now);
             
             const stopCard = document.createElement('div');
             stopCard.className = 'stop-card';
+            stopCard.draggable = true;
+            stopCard.dataset.stopName = stop;
+            stopCard.style.cursor = 'grab';
             
             let scheduleDisplay;
             if (nextSchedules.length > 0) {
@@ -92,10 +643,17 @@ function displaySchedules(scheduleData) {
             stopsGrid.appendChild(stopCard);
         }
         
+        // Restaurar orden guardado y habilitar drag & drop
+        applySortOrder(stopsGrid, lineName, stopsToDisplay);
+        setupDragAndDrop(stopsGrid, lineName);
+        
         lineElement.appendChild(lineHeader);
         lineElement.appendChild(stopsGrid);
         linesContainer.appendChild(lineElement);
     }
+    
+    // Mostrar prompt de ubicación
+    showLocationPrompt();
 }
 
 // Función para mostrar la hora actual
@@ -104,14 +662,10 @@ function updateCurrentTime() {
     const timeElement = document.getElementById('currentTime');
     const dateElement = document.getElementById('currentDate');
     
-    // Formatear hora usando un elemento temporal para minimizar reflows
-    let hours = now.getHours();
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12;
-    hours = hours ? hours : 12; // la hora '0' debe ser '12'
+    // Formatear hora en formato HH:MM (24 horas)
+    const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
-    const seconds = String(now.getSeconds()).padStart(2, '0');
-    const newTime = `${String(hours).padStart(2, '0')}:${minutes}:${seconds} ${ampm}`;
+    const newTime = `${hours}:${minutes}`;
     
     if (timeElement.textContent !== newTime) {
         requestAnimationFrame(() => {
@@ -158,27 +712,35 @@ window.showMap = function(mapType) {
     }
 }
 
-// Función para alternar el modo oscuro
+// Función para alternar el modo oscuro CON PERSISTENCIA
 window.toggleNightMode = function() {
     document.body.classList.toggle('dark-mode');
     const isDarkMode = document.body.classList.contains('dark-mode');
-    localStorage.setItem('darkMode', isDarkMode);
+    localStorage.setItem('darkMode', isDarkMode.toString());
+    console.log(`🌙 Modo oscuro: ${isDarkMode ? 'activado' : 'desactivado'}`);
 }
 
 async function initializeApp() {
     try {
-        // Cargar datos desde Firebase
+        // Cargar datos (con fallback automático)
         const scheduleData = await loadScheduleDataFromFirebase();
+        appState.currentScheduleData = scheduleData;
         
         // Mostrar los horarios
-        displaySchedules(scheduleData);
+        await displaySchedules(scheduleData);
         
-        // Actualizar la hora cada segundo
+        // Actualizar la hora cada minuto (granularidad suficiente para horarios)
         updateCurrentTime();
-        setInterval(updateCurrentTime, 1000);
+        const timeInterval = setInterval(updateCurrentTime, 60000);
+        appState.intervals.push(timeInterval);
         
-        // Actualizar los horarios cada minuto
-        setInterval(() => displaySchedules(scheduleData), 60000);
+        // Actualizar los horarios cada minuto (solo si tenemos datos)
+        if (scheduleData) {
+            const scheduleInterval = setInterval(() => {
+                displaySchedules(appState.currentScheduleData);
+            }, 60000);
+            appState.intervals.push(scheduleInterval);
+        }
         
         // Restaurar preferencia de modo oscuro
         const isDarkMode = localStorage.getItem('darkMode') === 'true';
@@ -189,7 +751,7 @@ async function initializeApp() {
         // Mostrar mapa de rutas por defecto
         showMap('routes');
         
-        console.log('Aplicación inicializada con éxito');
+        console.log(`✅ Aplicación inicializada con éxito (Fuente: ${dataSource})`);
         
     } catch (error) {
         console.error('Error al inicializar la aplicación:', error);
@@ -197,16 +759,28 @@ async function initializeApp() {
         const linesContainer = document.getElementById('linesContainer');
         linesContainer.innerHTML = `
             <div class="error-message">
-                Hubo un error al cargar los horarios. Por favor, intente nuevamente más tarde.
+                ❌ Hubo un error al cargar los horarios. 
+                <br>Por favor, intente nuevamente más tarde.
             </div>
         `;
     }
 }
 
+// Función para limpiar recursos
+function cleanupApp() {
+    appState.intervals.forEach(interval => clearInterval(interval));
+    appState.intervals = [];
+    appState.currentScheduleData = null;
+}
+
+// Limpiar al cerrar/recargar página
+window.addEventListener('beforeunload', cleanupApp);
+
 // Iniciar la aplicación cuando el DOM esté listo
 document.addEventListener('DOMContentLoaded', initializeApp);
 
 // Datos de horarios organizados por línea (respaldo local)
+// NOTA: Las claves de días DEBEN coincidir con: 'domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'
 export const scheduleData = {
     'Línea A': {
         stops: [
@@ -631,8 +1205,7 @@ function getCurrentTime() {
     const currentInfo = {
         time: now.toLocaleTimeString('es-AR', { 
             hour: '2-digit', 
-            minute: '2-digit', 
-            second: '2-digit' 
+            minute: '2-digit'
         }),
         date: now.toLocaleDateString('es-AR', { 
             weekday: 'long', 
@@ -713,9 +1286,9 @@ function findNextBuses(lineSchedules, stopName, current) {
         paradaOriginal: stopName,
         paradaNormalizada: normalizedStopName,
         dia: current.day,
-        paradasDisponibles: Object.keys(lineSchedules),
-        tieneHorariosParaParada: lineSchedules[normalizedStopName] ? 'Sí' : 'No',
-        horariosEncontrados: lineSchedules[normalizedStopName] ? Object.keys(lineSchedules[normalizedStopName]) : 'ninguno'
+        diasDisponibles: Object.keys(lineSchedules),
+        tieneParada: Object.values(lineSchedules).some(dia => dia[normalizedStopName]) ? 'Sí' : 'No',
+        horariosEncontrados: 'verificar en siguiente paso'
     });
     
     if (!lineSchedules) {
@@ -724,9 +1297,9 @@ function findNextBuses(lineSchedules, stopName, current) {
     }
 
     console.log('Datos de horarios:', {
-        paradasDisponibles: Object.keys(lineSchedules),
-        tieneHorariosParaParada: lineSchedules[normalizedStopName] ? 'Sí' : 'No',
-        horariosParaDia: lineSchedules[normalizedStopName] ? Object.keys(lineSchedules[normalizedStopName]) : 'ninguno'
+        diasDisponibles: Object.keys(lineSchedules),
+        tieneParada: Object.values(lineSchedules).some(dia => dia[normalizedStopName]) ? 'Sí' : 'No',
+        horariosParaDia: 'verificar en siguiente paso'
     });
     
     // Usar el nombre normalizado para el resto de la función
@@ -759,24 +1332,22 @@ function findNextBuses(lineSchedules, stopName, current) {
     console.log('Procesamiento del día:', {
         diaOriginal: current.day,
         diaNormalizado: scheduleType,
-        diasDisponibles: lineSchedules[normalizedStopName] ? Object.keys(lineSchedules[normalizedStopName]) : [],
-        tieneDia: lineSchedules[normalizedStopName] && lineSchedules[normalizedStopName][scheduleType] ? 'Sí' : 'No'
+        diasDisponibles: Object.keys(lineSchedules),
+        tieneDia: lineSchedules[scheduleType] ? 'Sí' : 'No',
+        paradasEnEseDia: lineSchedules[scheduleType] ? Object.keys(lineSchedules[scheduleType]) : []
     });
 
     console.log('Procesamiento del día:', {
         diaOriginal: current.day,
         diaNormalizado: scheduleType,
-        diasDisponibles: lineSchedules[normalizedStopName] ? Object.keys(lineSchedules[normalizedStopName]) : [],
-        tieneDia: lineSchedules[normalizedStopName] && lineSchedules[normalizedStopName][scheduleType] ? 'Sí' : 'No'
+        diasDisponibles: Object.keys(lineSchedules),
+        tieneDia: lineSchedules[scheduleType] ? 'Sí' : 'No',
+        paradasEnEseDia: lineSchedules[scheduleType] ? Object.keys(lineSchedules[scheduleType]) : []
     });
         
     console.log('Día normalizado:', scheduleType);
-    
-    console.log('Día original:', current.day);
-    console.log('Día normalizado:', scheduleType);
-    console.log('Horarios disponibles:', Object.keys(lineSchedules));
-    console.log('Parada:', stopName);
-    console.log('Horarios para esta parada:', lineSchedules[scheduleType]?.[stopName]);
+    console.log('Parada normalizada:', stopName);
+    console.log('Buscando horarios con estructura:', { dia: scheduleType, parada: stopName });
     
     // Buscar el horario para el día actual
     const schedules = lineSchedules[scheduleType]?.[stopName];

@@ -16,6 +16,32 @@
             <div class="current-date" id="currentDate">--</div>
         </div>
         
+        <!-- Widget de Clima -->
+        <div id="weather-widget" style="
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        ">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; align-items: center;">
+                <div>
+                    <div style="font-size: 36px; font-weight: bold;" id="temp">--°C</div>
+                    <div style="font-size: 12px; opacity: 0.9; margin-top: 5px;">Temperatura</div>
+                </div>
+                <div>
+                    <div style="font-size: 28px;" id="weather-condition">☀️</div>
+                    <div style="font-size: 12px; opacity: 0.9; margin-top: 5px;" id="weather-desc">Cargando...</div>
+                </div>
+                <div>
+                    <div style="font-size: 20px; font-weight: bold;" id="humidity">--%</div>
+                    <div style="font-size: 12px; opacity: 0.9; margin-top: 5px;">Humedad</div>
+                </div>
+            </div>
+        </div>
+        
         <div class="lines-container" id="linesContainer">
             <!-- Las líneas se generarán dinámicamente -->
         </div>
@@ -87,6 +113,8 @@
         window.db = db;
     </script>
     <script src="main.js" type="module"></script>
+    <!-- Testing tools (comentar en producción) -->
+    <script src="testing.js" type="module"></script>
     <script>
     // Mostrar el footer solo cuando se baja lo suficiente
     document.addEventListener('DOMContentLoaded', function() {
