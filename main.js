@@ -1,12 +1,143 @@
-import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { collection, getDocs, addDoc, deleteDoc, doc, query, where, onSnapshot, updateDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { scheduleData as localScheduleData } from './data.js';
 
 // Estado global para rastrear fuente de datos
 let dataSource = 'unknown'; // 'firebase', 'local', 'localStorage'
 let appState = {
     intervals: [],
-    currentScheduleData: null
+    currentScheduleData: null,
+    visitorId: null,
+    visitorUnsubscribe: null
 };
+
+// ======== FUNCIONES DE VISITANTES ========
+function generateVisitorId() {
+    return `visitor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+async function registerVisitor() {
+    try {
+        if (!window.db) {
+            console.warn('⚠️ Firebase no disponible para contador de visitantes');
+            return;
+        }
+
+        const visitorId = generateVisitorId();
+        appState.visitorId = visitorId;
+
+        // Crear documento del visitante
+        const visitorsRef = collection(window.db, 'visitors');
+        const docRef = await addDoc(visitorsRef, {
+            visitorId: visitorId,
+            startTime: serverTimestamp(),
+            lastActivity: serverTimestamp(),
+            userAgent: navigator.userAgent.substring(0, 100),
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        });
+
+        console.log('✅ Visitante registrado:', visitorId);
+
+        // Actualizar actividad cada 30 segundos
+        const activityInterval = setInterval(async () => {
+            try {
+                await updateDoc(docRef, {
+                    lastActivity: serverTimestamp()
+                });
+            } catch (error) {
+                console.warn('Error actualizando actividad:', error);
+                clearInterval(activityInterval);
+            }
+        }, 30000); // Cada 30 segundos
+
+        appState.intervals.push(activityInterval);
+
+        // Limpiar visitante cuando se cierre la página
+        window.addEventListener('beforeunload', async () => {
+            try {
+                await deleteDoc(docRef);
+            } catch (error) {
+                console.warn('Error eliminando visitante:', error);
+            }
+        });
+
+        // Escuchar cambios en el contador
+        subscribeToVisitorCount();
+
+    } catch (error) {
+        console.error('Error registrando visitante:', error);
+    }
+}
+
+function subscribeToVisitorCount() {
+    try {
+        if (!window.db) return;
+
+        const visitorsRef = collection(window.db, 'visitors');
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+        // Escuchar visitantes activos (últimas 5 minutos)
+        const q = query(visitorsRef, where('lastActivity', '>', fiveMinutesAgo));
+
+        if (appState.visitorUnsubscribe) {
+            appState.visitorUnsubscribe();
+        }
+
+        appState.visitorUnsubscribe = onSnapshot(q, (snapshot) => {
+            const count = snapshot.size;
+            updateVisitorCountDisplay(count);
+            console.log(`👥 Visitantes activos: ${count}`);
+        }, (error) => {
+            console.warn('Error escuchando visitantes:', error);
+        });
+
+    } catch (error) {
+        console.error('Error suscribiendo a contador:', error);
+    }
+}
+
+function updateVisitorCountDisplay(count) {
+    const badge = document.getElementById('visitorCountBadge');
+    if (badge) {
+        badge.textContent = count;
+        badge.style.display = count > 0 ? 'block' : 'none';
+        
+        // Pequeña animación
+        badge.style.animation = 'none';
+        setTimeout(() => {
+            badge.style.animation = 'pulse 0.5s ease-in-out';
+        }, 10);
+    }
+}
+
+// Limpiar visitantes inactivos cada 2 minutos
+function startCleanupInterval() {
+    const cleanupInterval = setInterval(async () => {
+        try {
+            if (!window.db) return;
+
+            const visitorsRef = collection(window.db, 'visitors');
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+            // Buscar visitantes inactivos (más de 5 minutos sin actividad)
+            const q = query(visitorsRef, where('lastActivity', '<', fiveMinutesAgo));
+            const snapshot = await getDocs(q);
+
+            let cleaned = 0;
+            for (const docSnapshot of snapshot.docs) {
+                await deleteDoc(doc(window.db, 'visitors', docSnapshot.id));
+                cleaned++;
+            }
+
+            if (cleaned > 0) {
+                console.log(`🗑️ Limpiados ${cleaned} visitantes inactivos`);
+            }
+        } catch (error) {
+            console.warn('Error en limpieza de visitantes:', error);
+        }
+    }, 120000); // Cada 2 minutos
+
+    appState.intervals.push(cleanupInterval);
+}
 
 // ======== FUNCIONES DE CLIMA ========
 async function getWeather() {
@@ -722,6 +853,10 @@ window.toggleNightMode = function() {
 
 async function initializeApp() {
     try {
+        // Registrar visitante y mostrar contador
+        registerVisitor();
+        startCleanupInterval();
+
         // Cargar datos (con fallback automático)
         const scheduleData = await loadScheduleDataFromFirebase();
         appState.currentScheduleData = scheduleData;
@@ -771,6 +906,11 @@ function cleanupApp() {
     appState.intervals.forEach(interval => clearInterval(interval));
     appState.intervals = [];
     appState.currentScheduleData = null;
+    
+    // Desuscribirse del contador de visitantes
+    if (appState.visitorUnsubscribe) {
+        appState.visitorUnsubscribe();
+    }
 }
 
 // Limpiar al cerrar/recargar página

@@ -114,6 +114,86 @@ body {
     font-size: 1.2em;
     color: #718096;
 }
+
+/* Estilos para el contador de visitantes */
+.visitor-counter {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 20px;
+    padding: 12px 20px;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+    border: 2px solid rgba(102, 126, 234, 0.3);
+    border-radius: 12px;
+    font-size: 0.95em;
+    color: #4a5568;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.visitor-counter:hover {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+    border-color: rgba(102, 126, 234, 0.5);
+    transform: scale(1.02);
+}
+
+.visitor-icon {
+    font-size: 1.3em;
+    display: inline-block;
+}
+
+.visitor-label {
+    color: #718096;
+    font-size: 0.9em;
+}
+
+.visitor-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    height: 32px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-weight: bold;
+    border-radius: 50%;
+    font-size: 1.1em;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.visitor-count {
+    animation: pulse 0.5s ease-in-out;
+}
+
+/* Modo oscuro para contador de visitantes */
+.dark-mode .visitor-counter {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+    border-color: rgba(102, 126, 234, 0.4);
+    color: #cbd5e0;
+}
+
+.dark-mode .visitor-label {
+    color: #a0aec0;
+}
+
+.dark-mode .visitor-counter:hover {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
+    border-color: rgba(102, 126, 234, 0.6);
+}
+
 .lines-container {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
