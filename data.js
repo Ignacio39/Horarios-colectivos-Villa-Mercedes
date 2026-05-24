@@ -89,7 +89,7 @@ export const scheduleData = {
         stops: [
             'Salida Terminal', 'Chacabuco y Güemes', 'Llerena y Sallorenzo', 'Balcarce y Ayacucho',
             'Policlínico', 'Potosí y Belgrano', 'Laínez y Sallorenzo', '3 de Febrero y 25 de Mayo',
-            'Llegada a Terminal', 'Chacabuco y Sallorenzo', '25 de Mayo y B. Moyano'
+            'Chacabuco y Sallorenzo', '25 de Mayo y B. Moyano', 'Llegada a Terminal'
         ],
         schedules: {
             'lunes': {

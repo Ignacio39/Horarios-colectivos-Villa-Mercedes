@@ -1243,7 +1243,7 @@ export const scheduleData = {
         stops: [
             'Salida Terminal', 'Chacabuco y Guemes', 'Llerena y Sallorenzo', 'Balcarce y Ayacucho',
             'Policlinico', 'Potosi y Belgrano', 'Lainez y Sallorenzo', '3 de Febrero y 25 de Mayo',
-            'Llegada a Terminal'
+            'Chacabuco y Sallorenzo', '25 de Mayo y B. Moyano', 'Llegada a Terminal'
         ],
         schedules: {
             'domingo': {
@@ -1495,16 +1495,20 @@ async function updateDisplay() {
         lineData.stops.forEach(stopName => {
             const nextInfo = findNextBuses(lineData.schedules, stopName, current);
 
+            // Si no hay horarios para esta parada hoy, no la mostramos
+            if (!nextInfo) return;
+
             let nextBusHTML = '';
-            if (nextInfo && nextInfo.next) {
+            if (nextInfo.next) {
                 const nowIndicator = nextInfo.next.isNow ? '<span class="now-indicator">AHORA</span>' : '';
                 nextBusHTML = `<div class="next-bus">Próximo: ${nextInfo.next.time} ${nowIndicator}</div>`;
                 if (nextInfo.upcoming.length > 0) {
                     nextBusHTML += `<div class="upcoming">Siguientes: ${nextInfo.upcoming.join(', ')}</div>`;
                 }
-            } else if (nextInfo && nextInfo.upcoming.length > 0) {
+            } else if (nextInfo.upcoming.length > 0) {
                 nextBusHTML = `<div class="upcoming">Mañana: ${nextInfo.upcoming[0]}</div>`;
             } else {
+                // Este caso es raro si nextInfo no es null, pero por seguridad:
                 nextBusHTML = '<div class="no-service">Sin servicio</div>';
             }
 
