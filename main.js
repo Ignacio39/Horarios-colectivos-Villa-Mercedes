@@ -1581,13 +1581,62 @@ function isMobile() {
     return window.innerWidth <= 768;
 }
 
+// Clima
+async function updateWeather() {
+    try {
+        const response = await fetch('https://api.open-meteo.com/v1/forecast?latitude=-33.6757&longitude=-65.4578&current=temperature_2m,relative_humidity_2m,weather_code&timezone=auto');
+        const data = await response.json();
+
+        if (data && data.current) {
+            const temp = Math.round(data.current.temperature_2m);
+            const humidity = data.current.relative_humidity_2m;
+            const code = data.current.weather_code;
+
+            document.getElementById('temp').textContent = `${temp}°C`;
+            document.getElementById('humidity').textContent = `${humidity}%`;
+
+            const weatherMap = {
+                0: { icon: '☀️', desc: 'Despejado' },
+                1: { icon: '🌤️', desc: 'Mayormente despejado' },
+                2: { icon: '⛅', desc: 'Parcialmente nublado' },
+                3: { icon: '☁️', desc: 'Nublado' },
+                45: { icon: '🌫️', desc: 'Neblina' },
+                48: { icon: '🌫️', desc: 'Neblina escarchada' },
+                51: { icon: '🌧️', desc: 'Llovizna' },
+                61: { icon: '🌧️', desc: 'Lluvia' },
+                80: { icon: '🌦️', desc: 'Chubascos' },
+                95: { icon: '⛈️', desc: 'Tormenta' }
+            };
+
+            const weather = weatherMap[code] || { icon: '🌤️', desc: 'Despejado' };
+            document.getElementById('weather-condition').textContent = weather.icon;
+            document.getElementById('weather-desc').textContent = weather.desc;
+        }
+    } catch (error) {
+        console.error('Error al cargar clima:', error);
+        document.getElementById('weather-desc').textContent = 'Error al cargar';
+    }
+}
+
 // Inicialización
 async function init() {
+    // Registrar visitante y mostrar contador
+    registerVisitor();
+    startCleanupInterval();
+
     await updateDisplay();
+    await updateWeather();
+
     // Forzar siempre la vista compacta
     document.body.classList.add('compact-view');
-    // Actualizar cada 1 segundo
-    setInterval(updateDisplay, 1000);
+
+    // Actualizar horarios cada segundo para el reloj
+    const displayInterval = setInterval(updateDisplay, 1000);
+    appState.intervals.push(displayInterval);
+
+    // Actualizar clima cada 30 minutos
+    const weatherInterval = setInterval(updateWeather, 30 * 60 * 1000);
+    appState.intervals.push(weatherInterval);
 
     // Escuchar cambios en tiempo real de Firebase
     const linesCollection = collection(window.db, 'lines');
