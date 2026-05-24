@@ -907,7 +907,8 @@ function cleanupApp() {
 window.addEventListener('beforeunload', cleanupApp);
 
 // Iniciar la aplicación cuando el DOM esté listo
-document.addEventListener('DOMContentLoaded', initializeApp);
+// initializeApp was causing double initialization. Consolidating into init().
+// document.addEventListener('DOMContentLoaded', initializeApp);
 
 // Datos de horarios organizados por línea (respaldo local)
 // NOTA: Las claves de días DEBEN coincidir con: 'domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'
@@ -1047,7 +1048,7 @@ export const scheduleData = {
     'Línea E': {
         stops: [
             'M.Ernst y Cazorla', 'Hospital La Ribera', 'Escuela Agraria', 'Ayacucho y Balcarce',
-            'Policlinico', 'Llegada Terminal', 'Salida Terminal', 'Hospital de la Villa',
+            'Policlinico', 'Llegada a Terminal', 'Salida Terminal', 'Hospital de la Villa',
             'Balcarce y Riobamba', 'Entrada Bº La Ribera'
         ],
         schedules: {
@@ -1154,7 +1155,7 @@ export const scheduleData = {
                 'Tucuman y Tallaferro': ['05:40', '07:25', '09:10', '10:55', '12:40', '14:25', '16:10', '17:55', '19:40'],
                 'Policlinico': ['05:53', '07:38', '09:23', '11:08', '12:53', '14:38', '16:23', '18:08', '19:53'],
                 'Llegada Terminal': ['06:01', '07:46', '09:31', '11:16', '13:01', '14:46', '16:31', '18:16', '20:01'],
-                'Salida de Terminal': ['06:16', '08:01', '09:46', '11:31', '13:16', '15:01', '16:46', '18:31', '20:16'],
+                'Salida Terminal': ['06:16', '08:01', '09:46', '11:31', '13:16', '15:01', '16:46', '18:31', '20:16'],
                 'Balcarce y Maipu': ['06:20', '08:05', '09:50', '11:35', '13:20', '15:05', '16:50', '18:35', '20:20'],
                 'E.Aguero y L.Guillet': ['06:31', '08:16', '10:01', '11:46', '13:31', '15:16', '17:01', '18:46', '20:31'],
                 'Gauna y Maipu': ['06:43', '08:28', '10:13', '11:58', '13:43', '15:28', '17:13', '18:58', '20:43'],
@@ -1242,7 +1243,7 @@ export const scheduleData = {
         stops: [
             'Salida Terminal', 'Chacabuco y Guemes', 'Llerena y Sallorenzo', 'Balcarce y Ayacucho',
             'Policlinico', 'Potosi y Belgrano', 'Lainez y Sallorenzo', '3 de Febrero y 25 de Mayo',
-            'Llegada Terminal'
+            'Llegada a Terminal'
         ],
         schedules: {
             'domingo': {
@@ -1254,7 +1255,7 @@ export const scheduleData = {
                 'Chacabuco y Sallorenzo': ['10:15', '11:47', '13:19', '14:51', '16:23'],
                 '25 de Mayo y B. Moyano': ['10:20', '11:52', '13:24', '14:56', '16:28'],
                 'Llegada a Terminal': ['10:22', '11:54', '13:26', '14:58', '16:30'],
-                'Salida de Terminal': ['09:05', '10:37', '12:09', '13:41', '15:13']
+                'Salida Terminal': ['09:05', '10:37', '12:09', '13:41', '15:13']
             },
             'lunes': {
                 'Salida Terminal': ['05:15', '06:47', '08:19', '09:51', '11:23', '12:55', '14:27', '15:59', '17:31', '19:03'],
@@ -1372,70 +1373,19 @@ function timeToMinutes(timeStr) {
 }
 
 function findNextBuses(lineSchedules, stopName, current) {
-    // Normalizar nombre de la parada
-    let normalizedStopName = stopName;
-
-    // Primero reemplazar el carácter ° por º si existe
-    normalizedStopName = normalizedStopName.replace('°', 'º');
-
-    // Lista de variantes conocidas y sus nombres normalizados
-    const stopVariants = {
-        'Htal Bº Eva Peron': 'Hospital Bº Eva Peron',
-        'Htal B° Eva Peron': 'Hospital Bº Eva Peron',
-        'Hospital B° Eva Peron': 'Hospital Bº Eva Peron'
+    const normalize = (str) => {
+        if (!str) return '';
+        return str.toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "") // Remover acentos
+            .replace(/[°ª]/g, "º")           // Estandarizar ordinales
+            .replace(/\./g, "")              // Remover puntos
+            .replace(/\s+/g, "")             // Remover espacios para comparación robusta
+            .trim();
     };
 
-    // Intentar encontrar la parada en las variantes conocidas
-    if (stopVariants[normalizedStopName]) {
-        const originalName = normalizedStopName;
-        normalizedStopName = stopVariants[normalizedStopName];
-        console.log('Normalizando nombre de parada:', {
-            original: originalName,
-            normalizado: normalizedStopName
-        });
-    }
+    const targetStop = normalize(stopName);
 
-    // Si no se encuentra la parada normalizada, intentar con todas las variantes
-    if (!lineSchedules[normalizedStopName]) {
-        console.log('Buscando horarios en variantes alternativas');
-        for (const [variant, normalized] of Object.entries(stopVariants)) {
-            if (lineSchedules[variant]) {
-                normalizedStopName = variant;
-                console.log('Encontrados horarios en variante:', variant);
-                break;
-            }
-            if (lineSchedules[normalized]) {
-                normalizedStopName = normalized;
-                console.log('Encontrados horarios en nombre normalizado:', normalized);
-                break;
-            }
-        }
-    }
-
-    console.log('Estado de la búsqueda:', {
-        paradaOriginal: stopName,
-        paradaNormalizada: normalizedStopName,
-        dia: current.day,
-        diasDisponibles: Object.keys(lineSchedules),
-        tieneParada: Object.values(lineSchedules).some(dia => dia[normalizedStopName]) ? 'Sí' : 'No',
-        horariosEncontrados: 'verificar en siguiente paso'
-    });
-
-    if (!lineSchedules) {
-        console.log('ERROR: No hay horarios definidos');
-        return null;
-    }
-
-    console.log('Datos de horarios:', {
-        diasDisponibles: Object.keys(lineSchedules),
-        tieneParada: Object.values(lineSchedules).some(dia => dia[normalizedStopName]) ? 'Sí' : 'No',
-        horariosParaDia: 'verificar en siguiente paso'
-    });
-
-    // Usar el nombre normalizado para el resto de la función
-    stopName = normalizedStopName;
-
-    // Normalizar el nombre del día para coincidir con las claves
     // Normalizar el nombre del día
     let scheduleType = current.day.toLowerCase()
         .replace(/[á]/g, 'a')
@@ -1444,43 +1394,45 @@ function findNextBuses(lineSchedules, stopName, current) {
         .replace(/[ó]/g, 'o')
         .replace(/[ú]/g, 'u');
 
-    // Mapeo de días de la semana
     const dayMappings = {
-        'lunes': 'lunes',
-        'martes': 'martes',
-        'miercoles': 'miercoles',
-        'miércoles': 'miercoles',
-        'jueves': 'jueves',
-        'viernes': 'viernes',
-        'sabado': 'sabado',
-        'sábado': 'sabado',
-        'domingo': 'domingo'
+        'lunes': 'lunes', 'martes': 'martes', 'miercoles': 'miercoles', 'miércoles': 'miercoles',
+        'jueves': 'jueves', 'viernes': 'viernes', 'sabado': 'sabado', 'sábado': 'sabado', 'domingo': 'domingo'
     };
-
     scheduleType = dayMappings[scheduleType] || scheduleType;
 
-    console.log('Procesamiento del día:', {
-        diaOriginal: current.day,
-        diaNormalizado: scheduleType,
-        diasDisponibles: Object.keys(lineSchedules),
-        tieneDia: lineSchedules[scheduleType] ? 'Sí' : 'No',
-        paradasEnEseDia: lineSchedules[scheduleType] ? Object.keys(lineSchedules[scheduleType]) : []
-    });
+    if (!lineSchedules || !lineSchedules[scheduleType]) {
+        console.log('ERROR: No hay horarios definidos para el día:', scheduleType);
+        return null;
+    }
 
-    console.log('Procesamiento del día:', {
-        diaOriginal: current.day,
-        diaNormalizado: scheduleType,
-        diasDisponibles: Object.keys(lineSchedules),
-        tieneDia: lineSchedules[scheduleType] ? 'Sí' : 'No',
-        paradasEnEseDia: lineSchedules[scheduleType] ? Object.keys(lineSchedules[scheduleType]) : []
-    });
+    const daySchedules = lineSchedules[scheduleType];
 
-    console.log('Día normalizado:', scheduleType);
-    console.log('Parada normalizada:', stopName);
-    console.log('Buscando horarios con estructura:', { dia: scheduleType, parada: stopName });
+    // Buscar la clave que coincida al normalizar
+    let actualStopKey = Object.keys(daySchedules).find(key => normalize(key) === targetStop);
 
-    // Buscar el horario para el día actual
-    const schedules = lineSchedules[scheduleType]?.[stopName];
+    // Fallback: Buscar variantes si no hay coincidencia exacta
+    if (!actualStopKey) {
+        const variants = {
+            'htal-bº-eva-peron': 'hospital-bº-eva-peron',
+            'htal-eva-peron': 'hospital-bº-eva-peron',
+            'terminal-de-omnibus': 'terminal',
+            'terminal': 'llegada-terminal',
+            'salida-terminal': 'salida-de-terminal',
+            'llegada-terminal': 'llegada-a-terminal'
+        };
+
+        const normalizedVariants = {};
+        for (let v in variants) normalizedVariants[normalize(v)] = normalize(variants[v]);
+
+        actualStopKey = Object.keys(daySchedules).find(key => {
+            const normalizedKey = normalize(key);
+            return normalizedKey === targetStop ||
+                normalizedVariants[targetStop] === normalizedKey ||
+                normalizedVariants[normalizedKey] === targetStop;
+        });
+    }
+
+    const schedules = daySchedules[actualStopKey];
 
     if (!schedules || schedules.length === 0) return null;
 
@@ -1530,7 +1482,7 @@ async function updateDisplay() {
     const container = document.getElementById('linesContainer');
     container.innerHTML = '';
 
-    Object.entries(scheduleData).forEach(([lineName, lineData]) => {
+    Object.entries(dataToUse).forEach(([lineName, lineData]) => {
         const lineCard = document.createElement('div');
         lineCard.className = 'line-card';
 
@@ -1654,4 +1606,5 @@ async function init() {
 }
 
 // Inicializar la aplicación
-init();
+// Consolidating all initialization into init()
+document.addEventListener('DOMContentLoaded', init);
